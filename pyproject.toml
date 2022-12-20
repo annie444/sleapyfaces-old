@@ -16,7 +16,10 @@ classifiers = [
     "License :: OSI Approved :: GPL License",
     "Operating System :: OS Independent",
 ]
+dynamic = ["version"]
 
 [project.urls]
 "Homepage" = "https://github.com/annie444/SLEAPyFaces"
 "Bug Tracker" = "https://github.com/annie444/SLEAPyFaces/issues"
+
+[tool]
