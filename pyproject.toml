@@ -4,9 +4,21 @@ build-backend = "hatchling.build"
 
 [project]
 name = "SLEAPyFaces"
-version = "0.0.1"
 authors = [
   { name="Analetta (Annie) Ehler", email="annie.ehler.4@gmail.com" },
+]
+maintainers = [
+  { name = "Analetta (Annie) Ehler", email = "annie.ehler.4@gmail.com" },
+]
+keywords = [
+  "SLEAP",
+	"facial expression",
+	"facial data",
+	"extraction",
+	"analysis",
+	"recognition",
+	"classification",
+	"tracking analyses",
 ]
 description = "A package for extracting facial expressions from SLEAP analyses"
 readme = "README.md"
@@ -15,11 +27,23 @@ classifiers = [
     "Programming Language :: Python :: 3",
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
+		"Development Status :: 4 - Beta"
 ]
+dependencies = []
 dynamic = ["version"]
 
 [project.urls]
 "Homepage" = "https://github.com/annie444/SLEAPyFaces"
 "Bug Tracker" = "https://github.com/annie444/SLEAPyFaces/issues"
 
-[tool]
+[tool.hatch.version]
+path = "src/SLEAPyFaces/__about__.py"
+
+[tool.hatch.build.targets.sdist]
+exclude = [
+  "/.github",
+  "/docs",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/SLEAPyFaces"]
