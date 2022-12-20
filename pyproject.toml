@@ -7,7 +7,7 @@ name = "sleapyfaces"
 description = 'A package for extracting facial expressions from SLEAP analyses'
 readme = "README.md"
 requires-python = ">=3.7"
-license = "MIT"
+license = "LICENSE"
 keywords = []
 authors = [
   { name = "Analetta (Annie) Ehler", email = "annie.ehler.4@gmail.com" },
@@ -22,6 +22,7 @@ classifiers = [
   "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: Implementation :: CPython",
   "Programming Language :: Python :: Implementation :: PyPy",
+	"License :: OSI Approved :: MIT License",
 ]
 dependencies = [
   "click",
@@ -32,36 +33,7 @@ dynamic = ["version"]
 Documentation = "https://github.com/annie444/sleapyfaces#readme"
 Issues = "https://github.com/annie444/sleapyfaces/issues"
 Source = "https://github.com/annie444/sleapyfaces"
+Homepage = "https://github.com/annie444/sleapyfaces"
 
 [project.scripts]
 sleapyfaces = "sleapyfaces.cli:sleapyfaces"
-
-[tool.hatch.version]
-path = "sleapyfaces/__about__.py"
-
-[tool.hatch.envs.default]
-dependencies = [
-  "pytest",
-  "pytest-cov",
-]
-
-[tool.hatch.envs.default.scripts]
-cov = "pytest --cov-report=term-missing --cov-config=pyproject.toml --cov=sleapyfaces --cov=tests {args}"
-no-cov = "cov --no-cov {args}"
-
-[[tool.hatch.envs.test.matrix]]
-python = ["37", "38", "39", "310", "311"]
-
-[tool.coverage.run]
-branch = true
-parallel = true
-omit = [
-  "sleapyfaces/__about__.py",
-]
-
-[tool.coverage.report]
-exclude_lines = [
-  "no cov",
-  "if __name__ == .__main__.:",
-  "if TYPE_CHECKING:",
-]

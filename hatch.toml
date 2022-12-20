@@ -1,0 +1,45 @@
+[version]
+path = "sleapyfaces/__about__.py"
+
+[envs.docs]
+dependencies = [
+  "mkdocs"
+]
+
+[envs.docs.scripts]
+build = "mkdocs build --clean --strict"
+serve = "mkdocs serve --dev-addr localhost:8000"
+
+[envs.default]
+dependencies = [
+  "pytest",
+  "pytest-cov",
+]
+
+[envs.development]
+dev-mode = true
+type = "virtual"
+extra-dependencies = [
+  "cowsay"
+]
+
+[envs.default.scripts]
+cov = "pytest --cov-report=term-missing --cov-config=pyproject.toml --cov=sleapyfaces --cov=tests {args}"
+no-cov = "cov --no-cov {args}"
+
+[[envs.test.matrix]]
+python = ["37", "38", "39", "310", "311"]
+
+[coverage.run]
+branch = true
+parallel = true
+omit = [
+  "sleapyfaces/__about__.py",
+]
+
+[coverage.report]
+exclude_lines = [
+  "no cov",
+  "if __name__ == .__main__.:",
+  "if TYPE_CHECKING:",
+]

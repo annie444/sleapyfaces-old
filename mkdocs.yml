@@ -1,0 +1,6 @@
+site_name: SLEAPyFaces
+site_url: https://annieehler.com/sleapyfaces
+nav:
+    - Home: index.md
+    - About: about.md
+theme: readthedocs
