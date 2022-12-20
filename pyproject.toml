@@ -3,47 +3,65 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "SLEAPyFaces"
+name = "sleapyfaces"
+description = 'A package for extracting facial expressions from SLEAP analyses'
+readme = "README.md"
+requires-python = ">=3.7"
+license = "MIT"
+keywords = []
 authors = [
-  { name="Analetta (Annie) Ehler", email="annie.ehler.4@gmail.com" },
-]
-maintainers = [
   { name = "Analetta (Annie) Ehler", email = "annie.ehler.4@gmail.com" },
 ]
-keywords = [
-  "SLEAP",
-	"facial expression",
-	"facial data",
-	"extraction",
-	"analysis",
-	"recognition",
-	"classification",
-	"tracking analyses",
-]
-description = "A package for extracting facial expressions from SLEAP analyses"
-readme = "README.md"
-requires-python = ">=3.10"
 classifiers = [
-    "Programming Language :: Python :: 3",
-    "License :: OSI Approved :: MIT License",
-    "Operating System :: OS Independent",
-		"Development Status :: 4 - Beta"
+  "Development Status :: 4 - Beta",
+  "Programming Language :: Python",
+  "Programming Language :: Python :: 3.7",
+  "Programming Language :: Python :: 3.8",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: Implementation :: CPython",
+  "Programming Language :: Python :: Implementation :: PyPy",
 ]
-dependencies = []
+dependencies = [
+  "click",
+]
 dynamic = ["version"]
 
 [project.urls]
-"Homepage" = "https://github.com/annie444/SLEAPyFaces"
-"Bug Tracker" = "https://github.com/annie444/SLEAPyFaces/issues"
+Documentation = "https://github.com/annie444/sleapyfaces#readme"
+Issues = "https://github.com/annie444/sleapyfaces/issues"
+Source = "https://github.com/annie444/sleapyfaces"
+
+[project.scripts]
+sleapyfaces = "sleapyfaces.cli:sleapyfaces"
 
 [tool.hatch.version]
-path = "src/SLEAPyFaces/__about__.py"
+path = "sleapyfaces/__about__.py"
 
-[tool.hatch.build.targets.sdist]
-exclude = [
-  "/.github",
-  "/docs",
+[tool.hatch.envs.default]
+dependencies = [
+  "pytest",
+  "pytest-cov",
 ]
 
-[tool.hatch.build.targets.wheel]
-packages = ["src/SLEAPyFaces"]
+[tool.hatch.envs.default.scripts]
+cov = "pytest --cov-report=term-missing --cov-config=pyproject.toml --cov=sleapyfaces --cov=tests {args}"
+no-cov = "cov --no-cov {args}"
+
+[[tool.hatch.envs.test.matrix]]
+python = ["37", "38", "39", "310", "311"]
+
+[tool.coverage.run]
+branch = true
+parallel = true
+omit = [
+  "sleapyfaces/__about__.py",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+  "no cov",
+  "if __name__ == .__main__.:",
+  "if TYPE_CHECKING:",
+]
