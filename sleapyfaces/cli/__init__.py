@@ -13,6 +13,7 @@ from ..__about__ import __version__
 @click.version_option(version=__version__, prog_name="sleapyfaces")
 @click.option("--count", default=1, help="Number of greetings.")
 @click.option("--name", prompt="Your name", help="The person to greet.")
+@click.pass_context
 def hello(count, name):
     """Simple program that greets NAME for a total of COUNT times."""
     for x in range(count):
