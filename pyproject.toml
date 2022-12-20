@@ -1,0 +1,22 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "SLEAPyFaces"
+version = "0.0.1"
+authors = [
+  { name="Analetta (Annie) Ehler", email="annie.ehler.4@gmail.com" },
+]
+description = "A package for extracting facial expressions from SLEAP analyses"
+readme = "README.md"
+requires-python = ">=3.7"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+
+[project.urls]
+"Homepage" = "https://github.com/annie444/SLEAPyFaces"
+"Bug Tracker" = "https://github.com/annie444/SLEAPyFaces/issues"
