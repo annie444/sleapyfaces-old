@@ -40,10 +40,10 @@ Things that it does:
     - [x] get transposed values of “tracking_scores”
     - [x] get decoded values of “node_names” (make sure theres no encoding issues)
 6. deconstruct SLEAP points into x and y points (across all frames)
-    - [ ] iterate over each node
-    - [ ] breakup the 4D array “tracks” into 1D array for x and y values respectively
+    - [x] iterate over each node
+    - [x] breakup the 4D array “tracks” into 1D array for x and y values respectively
         * Note: [frame, node, x/y, color] for greyscale the color dimension is 1D (i.e. essentially the 4D array is 3D because the color dimension is constant)
-    - [ ] iterate over each frame
+    - [x] iterate over each frame
     - [x] assign mouse, week, frame #, and timestamp (using average frames per second)
 7. Split data into individual trials by trial type using the Speaker and LED data from the CSV daq data
     - [ ] initialize trial iterators for the consistently documented points from the daq CSV

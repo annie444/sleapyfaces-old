@@ -1,15 +1,21 @@
 from dataclasses import dataclass
 from collections.abc import MutableSequence
 from os import PathLike
-from re import T
 import pandas as pd
+import numpy as np
 import glob
-from typing import List, Text, List, Iterable, Dict
+from typing import List, Text, List, Iterable, Dict, Sequence, Any
 from io import BufferedWriter
 import h5py
-from sleapyfaces.utilities import fill_missing
+from sleapyfaces.utilities import (
+    fill_missing,
+    json_dumps,
+    save_dict_to_hdf5,
+    save_dt_to_hdf5,
+)
 import json
 import ffmpeg
+import h5py as h5
 
 
 @dataclass
@@ -33,11 +39,10 @@ class DAQData(MutableSequence):
         self.cache = pd.read_csv(f"{self.BasePath}/{glob.glob('*.csv')[0]}")
         self.columns = self.cache.columns
 
-    def __init_subclass__(cls, BasePath, **kwargs):
-        super().__init_subclass__(**kwargs)
-        cls.BasePath = BasePath
-        cls.cache = pd.read_csv(f"{cls.BasePath}/{glob.glob('*.csv')[0]}")
-        cls.columns = cls.cache.columns
+    def __post_init__(self):
+        self.BasePath = self.BasePath
+        self.cache = pd.read_csv(f"{self.BasePath}/{glob.glob('*.csv')[0]}")
+        self.columns = self.cache.columns
 
     def __getitem__(self, col: Text) -> List:
         return self.cache[col].dropna().tolist()
@@ -98,6 +103,7 @@ class DAQData(MutableSequence):
             self.cache.to_csv(f"{filename}.csv", index=True)
 
 
+@dataclass
 class SLEAPanalysis:
     """
     Summary:
@@ -105,35 +111,28 @@ class SLEAPanalysis:
 
     Class Attributes:
         BasePath (Text | PathLike[Text]): path to the directory containing the SLEAP analysis file
-        Filename (Text): name of the SLEAP analysis file
 
     Instance Attributes:
         datasets (Dict): dictionary of datasets in the SLEAP analysis file
-        tracks (Array): 4D array of tracks in the SLEAP analysis file (frame, node index, x=0 & y=1, color index)
-            Note: the color index is the index of the color in video, for greyscale videos this is always 0, so the color index can be ignored
+        tracks (pd.DataFrame): a pandas DataFrame containing the tracks from the SLEAP analysis file
+                (with missing frames filled in using a linear interpolation method)
+                NOTE: more information about the tracks DataFrame can be found in the tracks property docstring
     """
 
     BasePath: Text | PathLike[Text]
-    Filename: Text
 
-    def __init__(self, BasePath, Filename=""):
+    def __init__(self, BasePath):
         self.BasePath = BasePath
-        self.Filename = Filename
-        self.datasets = self.getDatasets(self.BasePath, self.Filename)
-        self._tracks = self.datasets["tracks"]
+        self.datasets = self.getDatasets()
+        self.tracks = self.tracks_deconstructor(
+            self.datasets["tracks"], self.datasets["node_names"]
+        )
 
-    def __init_subclass__(cls, BasePath, Filename="", **kwargs):
-        super().__init_subclass__(**kwargs)
-        cls.BasePath = BasePath
-        cls.Filename = Filename
-        cls.datasets = cls.getDatasets(cls.BasePath, cls.Filename)
-        cls._tracks = cls.datasets["tracks"]
-
-    @staticmethod
-    def getDatasets(BasePath: Text | PathLike[Text], Filename="") -> Dict:
-        if Filename != "" and not Filename.endswith(".h5"):
-            Filename = Filename + ".h5"
-        with h5py.File(f"{BasePath}/{Filename}", "r") as f:
+    @classmethod
+    def getDatasets(
+        cls,
+    ) -> Dict[str, np.ndarray | pd.DataFrame | List | Sequence | MutableSequence]:
+        with h5py.File(f"{cls.BasePath}", "r") as f:
             datasets = list(f.keys())
             data = dict()
             for dataset in datasets:
@@ -144,6 +143,67 @@ class SLEAPanalysis:
                 else:
                     data[dataset] = f[dataset][:].T
         return data
+
+    @staticmethod
+    def tracks_deconstructor(
+        tracks: np.ndarray | pd.DataFrame | List | Sequence | MutableSequence,
+        nodes: np.ndarray | pd.DataFrame | List | Sequence | MutableSequence,
+    ) -> pd.DataFrame:
+        new_tracks = [pd.DataFrame()] * (len(nodes) * 2)
+        for n, node in enumerate(nodes):
+            new_tracks[n] = pd.concat(
+                [pd.DataFrame(tracks[:, n, 0, 0]), pd.DataFrame(tracks[:, n, 1, 0])],
+                columns=[f"{node}_x", f"{node}_y"],
+                axis=1,
+            )
+        return pd.concat(new_tracks, axis=1)
+
+    def save_data(self, filename: Text | PathLike[Text], path="SLEAP") -> None:
+        if filename.endswith(".h5") or filename.endswith(".H5"):
+            with h5py.File(filename) as f:
+                save_dict_to_hdf5(f, path, self.datasets)
+            with pd.HDFStore(filename, mode="a") as store:
+                save_dt_to_hdf5(store, self.tracks, f"{path}/tracks")
+
+    def __annotations__(self) -> Dict[str, type]:
+        return {
+            "BasePath": str | Text | PathLike[str] | PathLike[Text] | BufferedWriter,
+            "datasets": Dict[
+                str, np.ndarray | pd.DataFrame | List | Sequence | MutableSequence
+            ],
+            "tracks": pd.DataFrame,
+        }
+
+    def __post_init__(self):
+        self.BasePath = self.BasePath
+        self.datasets = self.getDatasets()
+        self.tracks = self.tracks_deconstructor(
+            self.datasets["tracks"], self.datasets["node_names"]
+        )
+
+    def __iter__(self):
+        return iter(self.__dict__.values())
+
+    def __repr__(self):
+        return f"{self.__class__.__name__}({self.__dict__})"
+
+    def __str__(self):
+        return self.__repr__()
+
+    def __eq__(self, other):
+        return self.__dict__ == other.__dict__
+
+    def __ne__(self, other):
+        return not self.__eq__(other)
+
+    def __hash__(self):
+        return hash(tuple(sorted(self.__dict__.items())))
+
+    def __getstate__(self):
+        return self.__dict__
+
+    def __setstate__(self, state):
+        self.__dict__.update(state)
 
 
 @dataclass
@@ -166,7 +226,7 @@ class BehMetadata(MutableSequence):
         cache (pd.DataFrame): Pandas DataFrame containing the JSON data.
         columns (List): List of column names in the cache."""
 
-    BasePath: Text | PathLike[Text]
+    BasePath: str | Text | PathLike[str] | PathLike[Text]
     MetaDataKey: Text
     TrialArrayKey: Text
     ITIArrayKey: Text
@@ -182,42 +242,30 @@ class BehMetadata(MutableSequence):
         self.MetaDataKey = MetaDataKey
         self.TrialArrayKey = TrialArrayKey
         self.ITIArrayKey = ITIArrayKey
-        self.cache = self.getCache(
-            self.BasePath, self.MetaDataKey, self.TrialArrayKey, self.ITIArrayKey
-        )
+        self.cache = self.getCache()
+        self.columns = self.cache.columns
+
+    def __post_init__(self):
+        self.BasePath = self.BasePath
+        self.MetaDataKey = self.MetaDataKey
+        self.TrialArrayKey = self.TrialArrayKey
+        self.ITIArrayKey = self.ITIArrayKey
+        self.cache = self.getCache()
         self.columns = self.cache.columns
 
     def __init_subclass__(
-        cls,
-        BasePath,
-        MetaDataKey="beh_metadata",
-        TrialArrayKey="trialArray",
-        ITIArrayKey="ITIArray",
-        **kwargs,
-    ):
-        super().__init_subclass__(**kwargs)
-        cls.BasePath = BasePath
-        cls.MetaDataKey = MetaDataKey
-        cls.TrialArrayKey = TrialArrayKey
-        cls.ITIArrayKey = ITIArrayKey
-        cls.cache = cls.getCache(
-            cls.BasePath, cls.MetaDataKey, cls.TrialArrayKey, cls.ITIArrayKey
-        )
-        cls.columns = cls.cache.columns
+        cls, BasePath: str | Text | PathLike[str] | PathLike[Text], *args, **kwargs
+    ) -> None:
+        super(BehMetadata, cls).__init__(*args, **kwargs)
 
-    @staticmethod
-    def getCache(
-        BasePath: Text | PathLike[Text],
-        MetaDataKey: Text,
-        TrialArrayKey: Text,
-        ITIArrayKey: Text,
-    ) -> pd.DataFrame:
-        with open(f"{BasePath}/{glob.glob('*.json')[0]}", "r") as js:
+    @classmethod
+    def getCache(cls) -> pd.DataFrame:
+        with open(f"{cls.BasePath}/{glob.glob('*.json')[0]}", "r") as js:
             js = json.load(js)
-            trialArray = js.get(MetaDataKey)[TrialArrayKey]
-            ITIArray = js.get(MetaDataKey)[ITIArrayKey]
+            trialArray = js.get(cls.MetaDataKey)[cls.TrialArrayKey]
+            ITIArray = js.get(cls.MetaDataKey)[cls.ITIArrayKey]
         return pd.DataFrame(
-            [trialArray, ITIArray], columns=[TrialArrayKey, ITIArrayKey]
+            [trialArray, ITIArray], columns=[cls.TrialArrayKey, cls.ITIArrayKey]
         )
 
     def __getitem__(self, col: Text) -> List:
@@ -279,6 +327,7 @@ class BehMetadata(MutableSequence):
             self.cache.to_csv(f"{filename}.csv", index=True)
 
 
+@dataclass
 class VideoMetadata:
     """
     Summary:
@@ -295,22 +344,82 @@ class VideoMetadata:
 
     def __init__(self, BasePath):
         self.BasePath = BasePath
-        self.fps = self.getFPS(self.BasePath)
+        self.cache = self.getCache()
+        self.fps = self.cache.get("avg_frame_rate")
 
-    def __init_subclass__(cls, BasePath, **kwargs):
-        super().__init_subclass__(**kwargs)
-        cls.BasePath = BasePath
-        cls.fps = cls.getFPS(cls.BasePath)
+    def __post_init__(self):
+        self.cache = self.getCache()
+        self.fps = self.cache.get("avg_frame_rate")
 
-    @staticmethod
-    def getFPS(BasePath: Text | PathLike[Text]) -> float:
+    @classmethod
+    def getCache(cls) -> Dict[Any, Any]:
         for video in glob.glob("*.mp4"):
             if len(glob.glob("*.mp4")) > 1:
                 continue
             else:
-                return ffmpeg.probe(f"{BasePath}/{video}")["streams"][
+                return ffmpeg.probe(f"{cls.BasePath}/{video}")["streams"][
                     (
-                        int(ffmpeg.probe(f"{BasePath}/{video}")["format"]["nb_streams"])
+                        int(
+                            ffmpeg.probe(f"{cls.BasePath}/{video}")["format"][
+                                "nb_streams"
+                            ]
+                        )
                         - 1
                     )
-                ].get("avg_frame_rate")
+                ]
+
+    def save_data(self, filename: Text | PathLike[Text] | BufferedWriter) -> None:
+        if (
+            filename.endswith(".json")
+            or filename.endswith(".JSON")
+            or isinstance(filename, BufferedWriter)
+        ):
+            json_dumps(self.cache, filename)
+        else:
+            json_dumps(self.cache, f"{filename}.csv")
+
+    def __repr__(self) -> Text:
+        return self.cache.__repr__()
+
+    def __str__(self) -> Text:
+        return self.cache.__str__()
+
+    def __getitem__(self, key: Text) -> Any:
+        return self.cache[key]
+
+    def __setitem__(self, key: Text, value: Any) -> None:
+        self.cache[key] = value
+
+    def __delitem__(self, key: Text) -> None:
+        del self.cache[key]
+
+    def __len__(self) -> int:
+        return len(list(self.cache.keys()))
+
+    def __contains__(self, key: Text) -> bool:
+        return self.cache.__contains__(key)
+
+    def __iter__(self) -> Iterable:
+        return self.cache.__iter__()
+
+    def __next__(self) -> Any:
+        return self.cache.__next__()
+
+    def __reversed__(self) -> Iterable:
+        return self.cache.__reversed__()
+
+    def __hash__(self) -> int:
+        return hash(self.cache)
+
+    def __eq__(self, other: Any) -> bool:
+        return self.cache.__eq__(other)
+
+    def __ne__(self, other: Any) -> bool:
+        return self.cache.__ne__(other)
+
+    def __annotations__(self) -> Dict[Any, type]:
+        return {
+            "BasePath": str | PathLike[str] | Text | PathLike[Text] | BufferedWriter,
+            "fps": float,
+            "cache": Dict[Any, Any],
+        }

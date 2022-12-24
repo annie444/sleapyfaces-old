@@ -58,10 +58,6 @@ def json_dumps(d: Dict, filename: str = None):
 
 def save_dt_to_hdf5(hdfstore: pd.HDFStore, dt: pd.DataFrame, path: str):
     """
-    Cite:
-        From: https://sleap.ai/
-        By: Talmo Pereira
-
     Summary:
         Saves a pandas DataFrame to an HDF5 file.
 
@@ -73,7 +69,7 @@ def save_dt_to_hdf5(hdfstore: pd.HDFStore, dt: pd.DataFrame, path: str):
     Returns:
         None
     """
-    dt.to_hdf(hdfstore, path, format="table", mode="a")
+    hdfstore.put(path, dt, format="table", data_columns=True)
 
 
 def save_dict_to_hdf5(h5file: h5.File, path: str, dic: dict):
@@ -128,7 +124,7 @@ def save_dict_to_hdf5(h5file: h5.File, path: str, dic: dict):
             raise ValueError("Cannot save %s type" % type(item))
 
 
-def fill_missing(Y, kind="linear") -> np.array:
+def fill_missing(Y, kind="linear") -> np.ndarray:
     """
     Cite:
         From: https://sleap.ai/notebooks/Analysis_examples.html
@@ -176,7 +172,7 @@ def fill_missing(Y, kind="linear") -> np.array:
     return Y
 
 
-def smooth_diff(node_loc, win=25, poly=3):
+def smooth_diff(node_loc: np.ndarray, win=25, poly=3) -> np.ndarray:
     """
     Cite:
         From: https://sleap.ai/notebooks/Analysis_examples.html
@@ -208,7 +204,9 @@ def smooth_diff(node_loc, win=25, poly=3):
     return node_vel
 
 
-def corr_roll(datax, datay, win):
+def corr_roll(
+    datax: List | pd.Series | np.ndarray, datay: List | pd.Series | np.ndarray, win: int
+) -> np.ndarray:
     """
     Cite:
             From: https://sleap.ai/notebooks/Analysis_examples.html
@@ -218,8 +216,8 @@ def corr_roll(datax, datay, win):
         Computes the rolling correlation between two timeseries
 
         Args:
-        datax (np.array or pd.Series): the x-dimensional timeseries
-        datay (np.array or pd.Series): the y-dimeansional timeseries
+        datax (List or np.array or pd.Series): the x-dimensional timeseries
+        datay (List np.array or pd.Series): the y-dimeansional timeseries
 
         win (int): sets the number of frames over which the covariance is computed
 
@@ -235,7 +233,7 @@ def corr_roll(datax, datay, win):
 
 
 def into_trial_format(
-    var: np.array | pd.DataFrame, trial_start_idx: List[int], trial_end_idx: List[int]
+    var: np.ndarray | pd.DataFrame, trial_start_idx: List[int], trial_end_idx: List[int]
 ) -> pd.DataFrame:
     """
     Summary:
@@ -261,7 +259,7 @@ def into_trial_format(
 
 
 # create gaussian kernel for smoothing
-def gaussian_kernel(window_size, sigma=1) -> np.array:
+def gaussian_kernel(window_size: int, sigma=1) -> np.ndarray:
     """
         Summary:
         this function creates a gaussian kernel for back smoothing
@@ -282,6 +280,7 @@ def gaussian_kernel(window_size, sigma=1) -> np.array:
 def reduce_led(iterable: list, ms=4000) -> list[float]:
     """
     Summary:
+
         Reduces rapid succession TTL pulses to a single pulse.
 
     Args:
