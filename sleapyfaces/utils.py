@@ -233,7 +233,7 @@ def into_trial_format(
     trial_types: list,
     trial_start_idx: np.ndarray[np.int64],
     trial_end_idx: np.ndarray[np.int64],
-) -> pd.DataFrame:
+) -> list[pd.DataFrame]:
     """
     Summary:
         Splits an array or dataframe into individual trials.
@@ -258,10 +258,10 @@ def into_trial_format(
         var_trials[trial] = pd.DataFrame(var[start:end, :])
         trial_type = [trial_type] * len(var_trials[trial])
         var_trials[trial] = pd.concat(
-            [var_trials[trial], pd.DataFrame(trial_type, columns=["trial_type"])],
+            [var_trials[trial], pd.Series(trial_type, name=["trial_type"])],
             axis=1,
         )
-    return pd.concat(var_trials, keys=range(len(var_trials)))
+    return var_trials
 
 
 # create gaussian kernel for smoothing

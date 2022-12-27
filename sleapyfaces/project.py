@@ -1,12 +1,13 @@
-from typing import Sequence
-import glob
 import os
-from sleapyfaces.structs import FileConstructor, CustomColumn
+from sleapyfaces.structs import CustomColumn, File, FileConstructor
 from sleapyfaces.experiment import Experiment
-from sleapyfaces.io import SLEAPanalysis, DAQData, BehMetadata, VideoMetadata
+from sleapyfaces.normalize import mean_center, z_score, pca
+from dataclasses import dataclass
+import pandas as pd
 
 
-class BaseProject(Sequence):
+@dataclass(slots=True)
+class Project:
     """Base class for project
 
     Args:
@@ -21,101 +22,102 @@ class BaseProject(Sequence):
 
     """
 
+    base: str
+    iterator: dict[str, str]
+    DAQFile: str
+    BehFile: str
+    SLEAPFile: str
+    VideoFile: str
+    exprs: list[Experiment]
+    custom_columns: list[CustomColumn]
+    get_glob: bool = False
+
     def __init__(
         self,
         base: str,
         iterator: dict[str, str],
         DAQFile: str,
-        ExprMetaFile: str,
+        BehFile: str,
         SLEAPFile: str,
         VideoFile: str,
-        glob: bool = False,
+        get_glob: bool = False,
     ):
         self.base = base
         self.iterators = iterator
         self.DAQFile = DAQFile
-        self.ExprMetaFile = ExprMetaFile
+        self.BehFile = BehFile
         self.SLEAPFile = SLEAPFile
         self.VideoFile = VideoFile
-        self.glob = glob
+        self.glob = get_glob
+        self.exprs = []
 
     def __post_init__(self):
-        self.files = ["" for _ in range(len(self.iterators.keys()))]
-        self.names = self.iterators.keys()
-        for i, key in enumerate(self.iterators.keys()):
-            if self.glob:
-                self.files[i] = FileConstructor(
-                    DAQFile=glob.glob(
-                        os.path.join(self.base, self.iterators[key], self.DAQFile)
-                    )[0],
-                    SLEAPFile=glob.glob(
-                        os.path.join(self.base, self.iterators[key], self.SLEAPFile)
-                    )[0],
-                    BehFile=glob.glob(
-                        os.path.join(self.base, self.iterators[key], self.ExprMetaFile)
-                    )[0],
-                    VideoFile=glob.glob(
-                        os.path.join(self.base, self.iterators[key], self.VideoFile)
-                    )[0],
-                )
-            else:
-                self.files[i] = FileConstructor(
-                    DAQFile=os.path.join(self.base, self.iterators[key], self.DAQFile),
-                    SLEAPFile=os.path.join(
-                        self.base, self.iterators[key], self.SLEAPFile
-                    ),
-                    BehFile=os.path.join(
-                        self.base, self.iterators[key], self.ExprMetaFile
-                    ),
-                    VideoFile=os.path.join(
-                        self.base, self.iterators[key], self.VideoFile
-                    ),
-                )
+        for name in list(self.iterators.keys()):
+            files = FileConstructor()
+            files.daq = File(
+                os.path.join(self.base, self.iterators[name]), self.DAQFile, self.glob
+            )
+            files.sleap = File(
+                os.path.join(self.base, self.iterators[name]),
+                self.SLEAPFile,
+                self.glob,
+            )
+            files.beh = File(
+                os.path.join(self.base, self.iterators[name]),
+                self.BehFile,
+                self.glob,
+            )
+            files.video = File(
+                os.path.join(self.base, self.iterators[name]),
+                self.VideoFile,
+                self.glob,
+            )
+            self.exprs.append(Experiment(name, files))
 
-    def build(self, key: str):
-        """Build the project"""
-        for expr in self.exprs:
-            expr["Experiment"] = Experiment(SLEAPanalysis(expr["Files"].SLEAP))
+    def buildColumns(self, columns: list, values: list):
+        self.custom_columns = [object] * len(columns)
+        exprs_list = [pd.DataFrame] * len(self.exprs)
+        names_list = [str] * len(self.exprs)
+        for i, name, value in enumerate(zip(columns, values)):
+            self.custom_columns[i] = CustomColumn(name, value)
+        for i in range(len(self.exprs)):
+            self.exprs[i].buildData(self.custom_columns)
+            exprs_list[i] = self.exprs[i].data
+            names_list[i] = self.exprs[i].name
+        self.all_data = pd.concat(exprs_list, keys=names_list)
 
-    @property
-    def files(self, key: str):
-        if key in self.iterators.keys():
-            if self.glob:
-                return FileConstructor(
-                    DAQFile=glob.glob(
-                        os.path.join(self.base, self.iterators[key], self.DAQFile)
-                    )[0],
-                    SLEAPFile=glob.glob(
-                        os.path.join(self.base, self.iterators[key], self.SLEAPFile)
-                    )[0],
-                    BehFile=glob.glob(
-                        os.path.join(self.base, self.iterators[key], self.ExprMetaFile)
-                    )[0],
-                    VideoFile=glob.glob(
-                        os.path.join(self.base, self.iterators[key], self.VideoFile)
-                    )[0],
-                )
-            else:
-                return FileConstructor(
-                    DAQFile=os.path.join(self.base, self.iterators[key], self.DAQFile),
-                    SLEAPFile=os.path.join(
-                        self.base, self.iterators[key], self.SLEAPFile
-                    ),
-                    BehFile=os.path.join(
-                        self.base, self.iterators[key], self.ExprMetaFile
-                    ),
-                    VideoFile=os.path.join(
-                        self.base, self.iterators[key], self.VideoFile
-                    ),
-                )
+    def buildTrials(
+        self,
+        TrackedData: list[str],
+        Reduced: list[bool],
+        start_buffer: int = 10000,
+        end_buffer: int = 13000,
+    ):
+        for i in range(len(self.exprs)):
+            self.exprs[i].buildTrials(TrackedData, Reduced, start_buffer, end_buffer)
 
-    @property
-    def exprs(self):
-        return [
-            {
-                "Name": name,
-                "Files": files,
-                "Experiment": Experiment(SLEAPanalysis(files.SLEAP)),
-            }
-            for name, files in zip(self.names, self.files)
-        ]
+    def meanCenterAll(self):
+        mean_all = [0] * len(self.exprs)
+        for i in range(len(self.exprs)):
+            mean_all[i] = [pd.DataFrame] * len(self.exprs[i].trialData)
+            for j in range(len(self.exprs[i].trialData)):
+                mean_all[i][j] = mean_center(
+                    self.exprs[i].trialData[i], self.exprs[i].sleap.track_names
+                )
+            mean_all[i] = pd.concat(
+                mean_all[i],
+                axis=0,
+                keys=range(len(mean_all[i])),
+            )
+            mean_all[i] = mean_center(mean_all[i], self.exprs[i].sleap.track_names)
+        self.all_data = pd.concat(mean_all, keys=list(self.iterators.keys()))
+
+    def zScore(self):
+        self.all_data = z_score(self.all_data, self.exprs[0].sleap.track_names)
+
+    def analyze(self):
+        self.meanCenterAll()
+        self.zScore()
+
+    def visualize(self):
+        self.pcas = pca(self.all_data, self.exprs[0].sleap.track_names)

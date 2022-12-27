@@ -3,8 +3,7 @@ from collections.abc import MutableSequence
 from os import PathLike
 import pandas as pd
 import numpy as np
-import glob
-from io import BufferedWriter
+from io import FileIO
 from sleapyfaces.utils import (
     fill_missing,
     json_dumps,
@@ -17,16 +16,14 @@ import ffmpeg
 import h5py as h5
 
 
-@dataclass
-class DAQData(MutableSequence):
+@dataclass(slots=True)
+class DAQData:
     """
     Summary:
         Cache for DAQ data.
 
-    Class Attributes:
+    Attrs:
         path (Text of PathLike[Text]): Path to the directory containing the DAQ data.
-
-    Instance Attributes:
         cache (pd.DataFrame): Pandas DataFrame containing the DAQ data.
         columns (List): List of column names in the cache.
 
@@ -36,15 +33,28 @@ class DAQData(MutableSequence):
     """
 
     path: str | PathLike[str]
+    cache: pd.DataFrame
+    columns: list
+    append: callable
+    saveData: callable
 
     def __init__(self, path: str | PathLike[str]):
         self.path = path
 
     def __post_init__(self):
         self.cache = pd.read_csv(self.path)
-        self.columns = self.cache.columns
+        self.columns = self.cache.columns.to_list()
 
     def append(self, name: str, value: list) -> None:
+        """takes in a list with a name and appends it to the cache as a column
+
+        Args:
+            name (str): The column name.
+            value (list): The column data.
+
+        Raises:
+            ValueError: If the length of the list does not match the length of the cached data.
+        """
         if len(list) == len(self.cache.iloc[:, 0]):
             self.cache = pd.concat(
                 [self.cache, pd.DataFrame(value, columns=[name])], axis=1
@@ -54,7 +64,7 @@ class DAQData(MutableSequence):
         else:
             raise ValueError("Length of list does not match length of cached data.")
 
-    def save_data(self, filename: str | PathLike[str] | BufferedWriter) -> None:
+    def saveData(self, filename: str | PathLike[str] | FileIO) -> None:
         """saves the cached data to a csv file
 
         Args:
@@ -63,14 +73,14 @@ class DAQData(MutableSequence):
         if (
             filename.endswith(".csv")
             or filename.endswith(".CSV")
-            or isinstance(filename, BufferedWriter)
+            or isinstance(filename, FileIO)
         ):
             self.cache.to_csv(filename, index=True)
         else:
             self.cache.to_csv(f"{filename}.csv", index=True)
 
 
-@dataclass
+@dataclass(slots=True)
 class SLEAPanalysis:
     """
     Summary:
@@ -88,23 +98,7 @@ class SLEAPanalysis:
     """
 
     path: str | PathLike[str]
-
-    def __init__(self, path: str | PathLike[str]):
-        self.path = path
-
-    def __post_init__(self):
-        self.data = self.getDatasets()
-        self.tracks = tracks_deconstructor(self.data["tracks"], self.data["node_names"])
-        self.track_names = [""] * len(self.data["node_names"]) * 2
-        for name, i in zip(
-            self.data["node_names"], range(0, (len(self.data["node_names"]) * 2), 2)
-        ):
-            self.track_names[i] = f"{name}_x"
-            self.track_names[i + 1] = f"{name}_y"
-
-    def getDatasets(
-        self,
-    ) -> dict[
+    data: dict[
         str,
         np.ndarray[str]
         | np.ndarray[int]
@@ -115,26 +109,56 @@ class SLEAPanalysis:
         | list[str]
         | list[int]
         | list[float],
-    ]:
-        """gets the datasets from the SLEAP analysis file
+    ]
+    tracks: pd.DataFrame
+    track_names: list
+    append: callable
+    saveData: callable
+    getTrackNames: callable
+    getDatasets: callable
+    getTracks: callable
 
-        Returns:
-            data (Dict): a dictionary containing the datasets from the SLEAP analysis file
-        """
+    def __init__(self, path: str | PathLike[str]):
+        self.path = path
+
+    def __post_init__(self):
+        """initializes the data"""
+        self.getDatasets()
+        self.getTracks()
+        self.getTrackNames()
+
+    def getDatasets(
+        self,
+    ) -> None:
+        """gets the datasets from the SLEAP analysis file"""
         with h5.File(f"{self.BasePath}", "r") as f:
             datasets = list(f.keys())
-            data = dict()
+            self.data = dict()
             for dataset in datasets:
                 if dataset == "tracks":
-                    data[dataset] = fill_missing(f[dataset][:].T)
+                    self.data[dataset] = fill_missing(f[dataset][:].T)
                 elif "name" in dataset:
-                    data[dataset] = [n.decode() for n in f[dataset][:].flatten()]
+                    self.data[dataset] = [n.decode() for n in f[dataset][:].flatten()]
                 else:
-                    data[dataset] = f[dataset][:].T
-        return data
+                    self.data[dataset] = f[dataset][:].T
 
-    def __len__(self) -> int:
-        return len(self.tracks.index)
+    def getTracks(self) -> None:
+        """gets the tracks from the SLEAP analysis file"""
+        if len(self.data.values()) == 0:
+            raise ValueError("No data has been loaded.")
+        else:
+            self.tracks = tracks_deconstructor(
+                self.data["tracks"], self.data["node_names"]
+            )
+
+    def getTrackNames(self) -> None:
+        """gets the track names from the SLEAP analysis file"""
+        self.track_names = [""] * len(self.data["node_names"]) * 2
+        for name, i in zip(
+            self.data["node_names"], range(0, (len(self.data["node_names"]) * 2), 2)
+        ):
+            self.track_names[i] = f"{name}_x"
+            self.track_names[i + 1] = f"{name}_y"
 
     def append(self, item: pd.Series[str] | pd.Series[int] | pd.Series[float]) -> None:
         if len(item) == len(self.tracks.index):
@@ -142,7 +166,7 @@ class SLEAPanalysis:
         else:
             raise ValueError("Length of list does not match length of cached data.")
 
-    def save_data(self, filename: str | PathLike[str], path="SLEAP") -> None:
+    def saveData(self, filename: str | PathLike[str], path="SLEAP") -> None:
         """saves the SLEAP analysis data to an HDF5 file
 
         Args:
@@ -156,8 +180,8 @@ class SLEAPanalysis:
                 save_dt_to_hdf5(store, self.tracks, f"{path}/tracks")
 
 
-@dataclass
-class BehMetadata(MutableSequence):
+@dataclass(slots=True)
+class BehMetadata:
     """
     Summary:
         Cache for JSON data.
@@ -180,6 +204,9 @@ class BehMetadata(MutableSequence):
     MetaDataKey: str
     TrialArrayKey: str
     ITIArrayKey: str
+    cache: pd.DataFrame
+    columns: list[str]
+    saveData: callable
 
     def __init__(
         self,
@@ -194,28 +221,27 @@ class BehMetadata(MutableSequence):
         self.ITIArrayKey = ITIArrayKey
 
     def __post_init__(self):
-        self.cache = self.getCache()
-        self.columns = self.cache.columns
-
-    def getCache(self) -> pd.DataFrame:
         with open(self.path, "r") as fp:
             js = json.load(fp)
             trialArray = js.get(self.MetaDataKey)[self.TrialArrayKey]
             ITIArray = js.get(self.MetaDataKey)[self.ITIArrayKey]
-        return pd.DataFrame([trialArray, ITIArray], columns=["trialArray", "ITIArray"])
+        self.cache = pd.DataFrame(
+            [trialArray, ITIArray], columns=["trialArray", "ITIArray"]
+        )
+        self.columns = self.cache.columns.to_list()
 
-    def save_data(self, filename: str | PathLike[str] | BufferedWriter) -> None:
+    def saveData(self, filename: str | PathLike[str] | FileIO) -> None:
         if (
             filename.endswith(".csv")
             or filename.endswith(".CSV")
-            or isinstance(filename, BufferedWriter)
+            or isinstance(filename, FileIO)
         ):
             self.cache.to_csv(filename, index=True)
         else:
             self.cache.to_csv(f"{filename}.csv", index=True)
 
 
-@dataclass
+@dataclass(slots=True)
 class VideoMetadata:
     """
     Summary:
@@ -229,33 +255,24 @@ class VideoMetadata:
     """
 
     path: str | PathLike[str]
+    cache: dict
+    fps: float
+    saveData: callable
 
     def __init__(self, path: str | PathLike[str]):
         self.path = path
 
     def __post_init__(self):
-        self.cache = self.getCache()
+        self.cache = ffmpeg.probe(f"{self.path}")["streams"][
+            (int(ffmpeg.probe(f"{self.path}")["format"]["nb_streams"]) - 1)
+        ]
         self.fps = float(eval(self.cache.get("avg_frame_rate")))
 
-    def getCache(self) -> dict:
-        for video in glob.glob("*.mp4"):
-            if len(glob.glob("*.mp4")) > 1:
-                continue
-            else:
-                return ffmpeg.probe(f"{self.path}/{video}")["streams"][
-                    (
-                        int(
-                            ffmpeg.probe(f"{self.path}/{video}")["format"]["nb_streams"]
-                        )
-                        - 1
-                    )
-                ]
-
-    def save_data(self, filename: str | PathLike[str] | BufferedWriter) -> None:
+    def saveData(self, filename: str | PathLike[str] | FileIO) -> None:
         if (
             filename.endswith(".json")
             or filename.endswith(".JSON")
-            or isinstance(filename, BufferedWriter)
+            or isinstance(filename, FileIO)
         ):
             json_dumps(self.cache, filename)
         else:

@@ -6,9 +6,12 @@ from sleapyfaces.io import (
 )
 from dataclasses import dataclass
 from os import PathLike
+import os
+import glob
 import pandas as pd
 
 
+@dataclass(slots=True)
 class File:
     """A structured file object that contains the base path and filename of a file.
 
@@ -22,29 +25,28 @@ class File:
         iPath: the ith base path of the file path. (i.e. iPath(1) returns the second to last path in the file path.)
     """
 
-    file_str: str | PathLike[str]
+    get_glob: bool
+    file: str | PathLike[str]
+    basepath: str | PathLike[str]
+    filename: str
+    iPath: callable
 
-    def __init__(self, file_str):
-        self._file = file_str
+    def __init__(self, basepath: str | PathLike[str], filename: str, get_glob=False):
+        self.basepath = basepath
+        self.filename = filename
 
-    @property
-    def file(self) -> str | PathLike[str]:
-        return self._file
-
-    @property
-    def filename(self) -> str:
-        return self._file.split("/")[-1]
-
-    @property
-    def basepath(self) -> str:
-        return "/".join(self._file.split("/")[:-1])
+    def __post_init__(self):
+        if self.get_glob:
+            self.file = glob.glob(os.path.join(self.basepath, self.filename))[0]
+        else:
+            self.file = os.path.join(self.basepath, self.filename)
 
     def iPath(self, i: int) -> str:
         """Returns the ith path in the file path."""
-        return "/".join(self._file.split("/")[:-i])
+        return "/".join(self.file.split("/")[:-i])
 
 
-@dataclass
+@dataclass(slots=True)
 class FileConstructor:
 
     """Takes in the base paths and filenames of the experimental data and returns them as a structured object.
@@ -62,24 +64,13 @@ class FileConstructor:
         Video (File): The location of the video file as a structured File object.
     """
 
-    DAQFile: str | PathLike[str] | DAQData.path
-    SLEAPFile: str | PathLike[str] | SLEAPanalysis.path
-    BehFile: str | PathLike[str] | BehMetadata.path
-    VideoFile: str | PathLike[str] | VideoMetadata.path
-
-    def __init__(
-        self,
-        DAQFile,
-        SLEAPFile,
-        BehFile,
-        VideoFile,
-    ):
-        self.DAQ = File(DAQFile)
-        self.SLEAP = File(SLEAPFile)
-        self.Beh = File(BehFile)
-        self.Video = File(VideoFile)
+    daq: File
+    sleap: File
+    beh: File
+    video: File
 
 
+@dataclass(slots=True)
 class CustomColumn:
     """Builds an annotation column for the base dataframe.
 
@@ -93,11 +84,13 @@ class CustomColumn:
 
     ColumnTitle: str
     ColumnData: str | int | float | bool
+    Column: pd.Series
+    buildColumn: callable
 
     def __init__(self, ColumnTitle: str, ColumnData: str | int | float | bool):
         self.ColumnTitle = ColumnTitle
         self.ColumnData = ColumnData
 
-    def column(self, length: int) -> pd.Series:
-        col = [self.ColumnData] * length
-        return pd.Series(col, name=self.ColumnTitle)
+    def buildColumn(self, length: int) -> None:
+        self.Column = [self.ColumnData] * length
+        self.Column = pd.Series(self.Column, name=self.ColumnTitle)

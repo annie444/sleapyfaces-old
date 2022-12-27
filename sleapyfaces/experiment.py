@@ -8,39 +8,51 @@ import pandas as pd
 import numpy as np
 
 
-@dataclass
+@dataclass(slots=True)
 class Experiment:
     name: str
     files: FileConstructor
-    cust_cols: list[CustomColumn]
     sleap: SLEAPanalysis
     beh: BehMetadata
     video: VideoMetadata
     daq: DAQData
+    data: pd.DataFrame
+    trials: pd.DataFrame
+    trialData: property
+    buildData: callable
+    buildTrials: callable
 
+    def __init__(self, name: str, files: FileConstructor):
+        self.name = name
+        self.files = files
+        self.sleap = SLEAPanalysis(self.files.sleap.file)
+        self.beh = BehMetadata(self.files.beh.file)
+        self.video = VideoMetadata(self.files.video.file)
+        self.daq = DAQData(self.files.daq.file)
 
-class DataContainer:
-    def __init__(
-        self,
-        SLEAP_instance: SLEAPanalysis,
-    ):
-        self.SLEAP = SLEAP_instance
+    def __post_init__(self):
+        self.data = self.sleap.tracks
+        self.numeric_columns = self.sleap.track_names
 
-    def data(self, CustomColumns: list[CustomColumn], Video: VideoMetadata):
+    def buildData(self, CustomColumns: list[CustomColumn]):
         for col in CustomColumns:
-            self.SLEAP.append(col.column(len(self.SLEAP)))
+            col.buildColumn(len(self.data.index))
+            self.append(col.Column)
 
-        ms_per_frame = (Video.fps**-1) * 1000
-        for i in range(len(self.SLEAP)):
-            self.SLEAP.append(pd.Series([i * ms_per_frame], name="Timestamps"))
-            self.SLEAP.append(pd.Series([i], name="Frames"))
-        return self.SLEAP
+        ms_per_frame = (self.video.fps**-1) * 1000
+        for i in range(len(self.sleap)):
+            self.append(pd.Series([i * ms_per_frame], name="Timestamps"))
+            self.append(pd.Series([i], name="Frames"))
 
-    def to_trial(
+    def append(self, item: pd.Series[str] | pd.Series[int] | pd.Series[float]):
+        if len(item) == len(self.data.index):
+            self.data = pd.concat([self.data, item], axis=1)
+        else:
+            raise ValueError("Length of list does not match length of cached data.")
+
+    def buildTrials(
         self,
         TrackedData: list[str],
-        DAQ: DAQData,
-        Beh: BehMetadata,
         Reduced: list[bool],
         start_buffer: int = 10000,
         end_buffer: int = 13000,
@@ -69,18 +81,20 @@ class DataContainer:
 
         start_indecies = [0] * len(TrackedData)
         end_indecies = [0] * len(TrackedData)
-        timestamps = self.SLEAP.tracks.loc[:, "Timestamps"].to_numpy(dtype=np.float256)
+        timestamps = self.data.loc[:, "Timestamps"].to_numpy(dtype=np.float256)
 
         for i, data, reduce in enumerate(zip(TrackedData, Reduced)):
 
             if reduce:
                 times = np.array(
-                    reduce_daq(pd.Series(DAQ.cache.loc[:, data]).tolist()),
+                    reduce_daq(pd.Series(self.daq.cache.loc[:, data]).tolist()),
                     dtype=np.float256,
                 )
 
             else:
-                times = pd.Series(DAQ.cache.loc[:, data]).to_numpy(dtype=np.float256)
+                times = pd.Series(self.daq.cache.loc[:, data]).to_numpy(
+                    dtype=np.float256
+                )
 
             start_indecies[i] = [0] * len(times)
             end_indecies[i] = [0] * len(times)
@@ -107,14 +121,22 @@ class DataContainer:
             raise ValueError(
                 "The number of start indecies does not match the number of end indecies."
             )
-        if len(start_indecies) != len(Beh.cache):
+        if len(start_indecies) != len(self.beh.cache):
             raise ValueError(
                 "The number of start indecies does not match the number of trials in the behavior data. Maybe reduce?"
             )
-
-        self.trials = into_trial_format(
-            self.SLEAP.tracks,
-            Beh.cache.loc[:, "trialArray"],
+        self.trialData = into_trial_format(
+            self.data,
+            self.beh.cache.loc[:, "trialArray"],
             start_indecies,
             end_indecies,
         )
+
+    @property
+    def trialData(self) -> list[pd.DataFrame]:
+        return self._trialData
+
+    @trialData.setter
+    def trialData(self, value):
+        self._trialData = value
+        self.trials = pd.concat(self.trialData, axis=0, keys=range(len(self.trialData)))
