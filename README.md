@@ -46,19 +46,19 @@ Things that it does:
     - [x] iterate over each frame
     - [x] assign mouse, week, frame #, and timestamp (using average frames per second)
 7. Split data into individual trials by trial type using the Speaker and LED data from the CSV daq data
-    - [ ] initialize trial iterators for the consistently documented points from the daq CSV
-    - [ ] iterate over each trial in “trialArray”
-    - [ ] get the index of 10sec before and 13sec after trial start
+    - [x] initialize trial iterators for the consistently documented points from the daq CSV
+    - [x] iterate over each trial in “trialArray”
+    - [x] get the index of 10sec before and 13sec after trial start
     - [x] for each feature, grab the start and end indices
     - [x] store data from each trial in a pd.dataframe
     - [x] concatenate all pd.dataframes together for each video
     - [ ] concatenate the pd.dataframes from each video together for each mouse (base expr split)
 8. Prepare the data
-    - [ ] (opt.) mean center across all points for a single trial
-    - [ ] mean center across all trials for a single experiment
-    - [ ] mean center across all experiments for a single mouse
-    - [ ] mean center across all mice
-    - [ ] (opt.) z-score mean centered data
+    - [x] (opt.) mean center across all points for a single trial
+    - [x] mean center across all trials for a single experiment
+    - [x] mean center across all experiments for a single mouse
+    - [x] mean center across all mice
+    - [x] (opt.) z-score mean centered data
 9. Analyze the data
     - [ ] Perform 2D and 3D PCAs on all data (raw, centered, by trial, by week, by mouse, etc…)
     - [ ] apply gaussian kernel to PCA outputs

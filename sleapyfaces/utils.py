@@ -1,12 +1,11 @@
 import h5py as h5
 import numpy as np
 import pandas as pd
-import rapidjson
 from scipy.signal import savgol_filter
 from scipy.interpolate import interp1d
 import json
 
-from typing import Dict, List
+from typing import Dict, List, Sequence, MutableSequence
 
 
 def json_loads(json_str: str) -> Dict:
@@ -24,10 +23,7 @@ def json_loads(json_str: str) -> Dict:
     Returns:
         Result of decoding JSON string.
     """
-    try:
-        return rapidjson.loads(json_str)
-    except:
-        return json.loads(json_str)
+    return json.loads(json_str)
 
 
 def json_dumps(d: Dict, filename: str = None):
@@ -47,7 +43,7 @@ def json_dumps(d: Dict, filename: str = None):
         None
     """
 
-    encoder = rapidjson
+    encoder = json
 
     if filename:
         with open(filename, "w") as f:
@@ -233,7 +229,10 @@ def corr_roll(
 
 
 def into_trial_format(
-    var: np.ndarray | pd.DataFrame, trial_start_idx: List[int], trial_end_idx: List[int]
+    var: pd.DataFrame,
+    trial_types: list,
+    trial_start_idx: np.ndarray[np.int64],
+    trial_end_idx: np.ndarray[np.int64],
 ) -> pd.DataFrame:
     """
     Summary:
@@ -253,8 +252,15 @@ def into_trial_format(
     if len(trial_start_idx) != len(trial_end_idx):
         raise ValueError("trial_start_idx and trial_end_idx must be the same length")
     var_trials = [0] * len(trial_start_idx)
-    for trial, start, end in enumerate(zip(trial_start_idx, trial_end_idx)):
-        var_trials[trial] = pd.DataFrame(var[start:end])
+    for trial, start, end, trial_type in enumerate(
+        zip(trial_start_idx, trial_end_idx, trial_types)
+    ):
+        var_trials[trial] = pd.DataFrame(var[start:end, :])
+        trial_type = [trial_type] * len(var_trials[trial])
+        var_trials[trial] = pd.concat(
+            [var_trials[trial], pd.DataFrame(trial_type, columns=["trial_type"])],
+            axis=1,
+        )
     return pd.concat(var_trials, keys=range(len(var_trials)))
 
 
@@ -277,7 +283,7 @@ def gaussian_kernel(window_size: int, sigma=1) -> np.ndarray:
     return to_ret
 
 
-def reduce_led(iterable: list, ms=4000) -> list[float]:
+def reduce_daq(iterable: list, ms=4000) -> list[float]:
     """
     Summary:
 
@@ -298,3 +304,26 @@ def reduce_led(iterable: list, ms=4000) -> list[float]:
             j = i
             list.append(iterable[j])
     return list
+
+
+def tracks_deconstructor(
+    tracks: np.ndarray | pd.DataFrame | List | Sequence | MutableSequence,
+    nodes: np.ndarray | pd.DataFrame | List | Sequence | MutableSequence,
+) -> pd.DataFrame:
+    """takes the tracks array from a SLEAP analysis file and converts it into a pandas DataFrame
+
+    Args:
+        tracks (np.ndarray | pd.DataFrame | List | Sequence | MutableSequence): the 4D array of tracks from a SLEAP analysis file
+        nodes (np.ndarray | pd.DataFrame | List | Sequence | MutableSequence): the list of nodes from a SLEAP analysis file
+
+    Returns:
+        pd.DataFrame: the tracks DataFrame
+    """
+    new_tracks = [pd.DataFrame()] * (len(nodes) * 2)
+    for n, node in enumerate(nodes):
+        new_tracks[n] = pd.concat(
+            [pd.DataFrame(tracks[:, n, 0, 0]), pd.DataFrame(tracks[:, n, 1, 0])],
+            columns=[f"{node}_x", f"{node}_y"],
+            axis=1,
+        )
+    return pd.concat(new_tracks, axis=1)
